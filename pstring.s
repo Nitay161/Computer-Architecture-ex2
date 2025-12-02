@@ -9,20 +9,20 @@ concat_err_str:        .string "cannot concatenate strings!\n"
 .globl pstrlen
 .type pstrlen, @function
 pstrlen:
-    pushq %rbp                  # Prologue
+    pushq %rbp                  
     movq %rsp, %rbp
     
     # Get the length byte (first byte of Pstring)
     movzbq (%rdi), %rax         # Zero-extend byte to rax
     
-    movq %rbp, %rsp             # Epilogue
+    movq %rbp, %rsp             
     popq %rbp
     ret
 
 .globl swapCase
 .type swapCase, @function
 swapCase:
-    pushq %rbp                  # Prologue
+    pushq %rbp                  
     movq %rsp, %rbp
     
     # Save the original Pstring pointer for return value
@@ -67,14 +67,14 @@ swapCase_next:
     jnz swapCase_loop           # Continue if not zero
     
 swapCase_done:
-    movq %rbp, %rsp             # Epilogue
+    movq %rbp, %rsp             
     popq %rbp
     ret
 
 .globl pstrijcpy
 .type pstrijcpy, @function
 pstrijcpy:
-    pushq %rbp                  # Prologue
+    pushq %rbp
     movq %rsp, %rbp
     
     # Save registers
@@ -147,77 +147,114 @@ pstrijcpy_done:
     popq %r12
     popq %rbx
     
-    movq %rbp, %rsp             # Epilogue
+    movq %rbp, %rsp            
     popq %rbp
     ret
 
-.globl pstrcat
-.type pstrcat, @function
-pstrcat:
-    pushq %rbp                  # Prologue
+.globl pstrcmp
+.type pstrcmp, @function
+pstrcmp:
+    pushq %rbp
     movq %rsp, %rbp
     
     # Save registers
     pushq %rbx
     pushq %r12
     
-    # Save parameters: dst in %rbx, src in %r12
-    movq %rdi, %rbx             # Save dst
-    movq %rsi, %r12             # Save src
+    # Save parameters: pstr1 in %rbx, pstr2 in %r12
+    movq %rdi, %rbx
+    movq %rsi, %r12
     
-    # Calculate total length
-    movzbq (%rbx), %rcx         # dst->len in rcx
-    movzbq (%r12), %rdx         # src->len in rdx
-    movq %rcx, %rax             # Save original dst->len in rax
-    addq %rdx, %rcx             # rcx = dst->len + src->len
+    # Point to the start of strings
+    leaq 1(%rbx), %rbx
+    leaq 1(%r12), %r12
     
-    # Check if total length <= 254
-    cmpq $254, %rcx
-    jg pstrcat_error
+pstrcmp_loop:
+    movb (%rbx), %al            # Load char from pstr1
+    movb (%r12), %cl            # Load char from pstr2
     
-    # Update the length byte of dst
-    movb %cl, (%rbx)
+    # Check if we reached the end of pstr1 (null terminator)
+    testb %al, %al
+    jz pstrcmp_check_end
     
-    # Calculate where to append: dst_start = &dst->str[dst->len]
-    leaq 1(%rbx, %rax), %rdi    # dst_start = &dst + 1 + dst->len
+    # Check if we reached the end of pstr2
+    testb %cl, %cl
+    jz pstrcmp_pstr1_larger     # pstr1 continues but pstr2 ended -> pstr1 > pstr2
     
-    # Calculate src start: src_start = &src->str[0]
-    leaq 1(%r12), %rsi          # src_start = &src + 1
+    # Compare characters
+    cmpb %cl, %al
+    jl pstrcmp_pstr1_smaller    # char1 < char2
+    jg pstrcmp_pstr1_larger     # char1 > char2
     
-    # Set up for copy loop
-    movq %rdx, %rcx             # Number of bytes to copy = src->len
+    # Characters are equal, move to next
+    incq %rbx
+    incq %r12
+    jmp pstrcmp_loop
+
+pstrcmp_check_end:
+    # pstr1 ended. Check if pstr2 also ended.
+    testb %cl, %cl
+    jnz pstrcmp_pstr1_smaller   # pstr1 ended but pstr2 continues -> pstr1 < pstr2
     
-copy_cat_loop:
-    cmpq $0, %rcx               # Check if we've copied everything
-    je copy_cat_done
-    
-    movb (%rsi), %al            # Get byte from src
-    movb %al, (%rdi)            # Store in dst
-    
-    incq %rsi                   # Move to next source byte
-    incq %rdi                   # Move to next destination byte
-    decq %rcx                   # Decrement counter
-    jmp copy_cat_loop
-    
-copy_cat_done:
-    # Return dst
-    movq %rbx, %rax
-    jmp pstrcat_done
-    
-pstrcat_error:
-    # Print error message
-    movq $concat_err_str, %rdi
-    xorq %rax, %rax
-    call printf
-    
-    # Return dst unchanged
-    movq %rbx, %rax
-    
-pstrcat_done:
+    # Both ended at the same time -> Equal
+    movl $0, %eax
+    jmp pstrcmp_done
+
+pstrcmp_pstr1_smaller:
+    movl $-1, %eax
+    jmp pstrcmp_done
+
+pstrcmp_pstr1_larger:
+    movl $1, %eax
+    jmp pstrcmp_done
+
+pstrcmp_done:
     # Restore registers
     popq %r12
     popq %rbx
     
-    movq %rbp, %rsp             # Epilogue
+    movq %rbp, %rsp             
+    popq %rbp
+    ret
+
+.globl pstrrev
+.type pstrrev, @function
+pstrrev:
+    pushq %rbp                  
+    movq %rsp, %rbp
+    
+    # Save return value
+    movq %rdi, %rax
+    
+    # Get length
+    movzbq (%rdi), %rcx
+    testq %rcx, %rcx            # If length is 0, nothing to do
+    jz pstrrev_done
+    
+    # Setup pointers:
+    # %r8 points to start (first char)
+    # %r9 points to end (last char)
+    leaq 1(%rdi), %r8           # Start = &str[0]
+    leaq 1(%rdi, %rcx), %r9     # End = &str[len-1]
+    leaq (%rdi, %rcx), %r9      # End pointer
+    
+pstrrev_loop:
+    # Check if pointers met or crossed (%r8 >= %r9)
+    cmpq %r9, %r8
+    jge pstrrev_done
+    
+    # Swap characters
+    movb (%r8), %dl             # Load char from start
+    movb (%r9), %cl             # Load char from end
+    movb %cl, (%r8)             # Store end char at start
+    movb %dl, (%r9)             # Store start char at end
+    
+    # Move pointers
+    incq %r8                    # Move start forward
+    decq %r9                    # Move end backward
+    jmp pstrrev_loop
+    
+pstrrev_done:
+    movq %rbp, %rsp             
     popq %rbp
     ret

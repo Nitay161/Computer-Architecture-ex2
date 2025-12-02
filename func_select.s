@@ -3,6 +3,9 @@
 format_lengths:    .string "first pstring length: %d, second pstring length: %d\n"
 format_pstring:    .string "length: %d, string: %s\n"
 format_invalid:    .string "invalid option!\n"
+cmp_small:           .string "First string is smaller\n"
+cmp_equel:            .string "Strings are equal\n"
+cmp_large:           .string "First string is larger\n"
 scan_indexes:      .string "%d %d"
 
 .section .note.GNU-stack,"",@progbits
@@ -11,7 +14,7 @@ scan_indexes:      .string "%d %d"
 .globl run_func
 .type run_func, @function
 run_func:
-    pushq %rbp                  # Prologue
+    pushq %rbp                  
     movq %rsp, %rbp
     subq $16, %rsp              # Allocate space for local variables
     
@@ -35,8 +38,11 @@ run_func:
     cmpl $34, %ebx
     je case_34
     
-    cmpl $37, %ebx
-    je case_37
+    cmpl $41, %ebx
+    je case_41
+    
+    cmpl $42, %ebx
+    je case_42
     
     # Default case - invalid option
     movq $format_invalid, %rdi
@@ -113,24 +119,57 @@ case_34:
     call printf
     jmp func_done
     
-case_37:
-    # pstrcat - concatenate strings
-    movq %r12, %rdi             # dst
-    movq %r13, %rsi             # src
-    call pstrcat
+case_41:
+    # pstrcmp - compare strings
+    movq %r12, %rdi             # pstr1
+    movq %r13, %rsi             # pstr2
+    call pstrcmp
     
-    # Print both strings
-    movzbq (%r12), %rsi         # First length
-    leaq 1(%r12), %rdx          # First string pointer
+    # Check result
+    cmpl $0, %eax
+    jl case_41_smaller          # result < 0
+    jg case_41_larger           # result > 0
+    
+    # Equal
+    movq $cmp_equel, %rdi
+    jmp case_41_print
+
+case_41_smaller:
+    movq $cmp_small, %rdi
+    jmp case_41_print
+
+case_41_larger:
+    movq $cmp_large, %rdi
+
+case_41_print:
+    xorq %rax, %rax
+    call printf
+    jmp func_done
+
+case_42:
+    # pstrrev - reverse both strings
+    # Reverse pstr1
+    movq %r12, %rdi
+    call pstrrev
+    
+    # Print pstr1
+    movzbq (%r12), %rsi         # Length
+    leaq 1(%r12), %rdx          # String pointer
     movq $format_pstring, %rdi
     xorq %rax, %rax
     call printf
     
-    movzbq (%r13), %rsi         # Second length
-    leaq 1(%r13), %rdx          # Second string pointer
+    # Reverse pstr2
+    movq %r13, %rdi
+    call pstrrev
+    
+    # Print pstr2
+    movzbq (%r13), %rsi         # Length
+    leaq 1(%r13), %rdx          # String pointer
     movq $format_pstring, %rdi
     xorq %rax, %rax
     call printf
+    jmp func_done
     
 func_done:
     # Restore callee-saved registers
@@ -138,6 +177,6 @@ func_done:
     popq %r12
     popq %rbx
     
-    movq %rbp, %rsp             # Epilogue
+    movq %rbp, %rsp             
     popq %rbp
     ret
