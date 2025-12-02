@@ -22,6 +22,7 @@ run_func:
     pushq %rbx
     pushq %r12
     pushq %r13
+    pushq %r14
     
     # Save parameters: choice in %ebx, pstr1 in %r12, pstr2 in %r13
     movl %edi, %ebx
@@ -173,6 +174,7 @@ case_42:
     
 func_done:
     # Restore callee-saved registers
+    popq %r14
     popq %r13
     popq %r12
     popq %rbx
